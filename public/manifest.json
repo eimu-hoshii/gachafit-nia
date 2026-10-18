@@ -1,0 +1,23 @@
+{
+  "name": "GachaFit with ニア",
+  "short_name": "GachaFit",
+  "description": "毎日1タップで迷いなく自宅トレーニングを完遂できるガチャ式応援筋トレアプリ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0B0B10",
+  "theme_color": "#E11D48",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./assets/nia_exp_serious.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "./assets/nia_face_main.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}

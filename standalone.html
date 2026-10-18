@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B0B10" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="GachaFit" />
+  <title>GachaFit with ニア | 1タップ・ガチャ式応援筋トレ</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          keyframes: {
+            cheer: {
+              '0%, 100%': { transform: 'translateY(0) rotate(-3deg)' },
+              '50%': { transform: 'translateY(-8px) rotate(3deg)' }
+            },
+            slotSpin: {
+              '0%': { transform: 'translateY(-20%)', opacity: '0.4' },
+              '50%': { transform: 'translateY(10%)', opacity: '0.8' },
+              '100%': { transform: 'translateY(0)', opacity: '1' }
+            }
+          },
+          animation: {
+            cheer: 'cheer 0.65s ease-in-out infinite',
+            slotSpin: 'slotSpin 0.25s ease-out'
+          }
+        }
+      }
+    };
+  </script>
+  <!-- React 18 & Babel Standalone -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans CJK JP", sans-serif;
+      background-color: #0B0B10;
+      color: #F4F4F5;
+    }
+  </style>
+</head>
+<body class="bg-[#0B0B10] text-zinc-100 antialiased selection:bg-rose-600 selection:text-white overflow-x-hidden">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useMemo } = React;
+
+    // ==================== 種目マスターデータ（JSON完全一致・変更可能） ====================
+    const DEFAULT_EXERCISES = [
+      {
+        "id": "db_bench_press",
+        "name": "ダンベルベンチプレス",
+        "target": "胸（全体・中部）",
+        "category": "push",
+        "bench_angle": "フラット（0°）",
+        "gear_setting": "ダンベル片手 10.0kg",
+        "setup_detail": "1.25kg + 1.5kg + 2.0kg（各2枚フル装着）",
+        "tips": "肩甲骨を寄せて下ろす。バーベルより深く下ろして胸をストレッチ！",
+        "sets": 3,
+        "reps": "10〜12回",
+        "interval_sec": 90
+      },
+      {
+        "id": "incline_db_press",
+        "name": "インクラインダンベルプレス",
+        "target": "胸（上部・鎖骨下）",
+        "category": "push",
+        "bench_angle": "インクライン 30°〜45°",
+        "gear_setting": "ダンベル片手 7.5kg または 10.0kg",
+        "setup_detail": "7.5kg: 1.5kg+2.0kg / 10kg: フル装着",
+        "tips": "鎖骨のラインに向かって押し出す。上部へのダイレクトな負荷を意識！",
+        "sets": 3,
+        "reps": "10〜12回",
+        "interval_sec": 90
+      },
+      {
+        "id": "dips",
+        "name": "ディップス",
+        "target": "胸（輪郭・下部）& 上腕三頭筋",
+        "category": "push",
+        "bench_angle": "なし（懸垂スタンド中段）",
+        "gear_setting": "自重",
+        "setup_detail": "ディップスバーを握り、少し上体を前傾させる",
+        "tips": "体を前傾させると大胸筋下部に、直立させると二の腕裏（三頭筋）に直撃！",
+        "sets": 3,
+        "reps": "限界まで（8〜12回目標）",
+        "interval_sec": 90
+      },
+      {
+        "id": "tube_chest_fly",
+        "name": "チューブチェストフライ",
+        "target": "胸（内側・谷間）",
+        "category": "push",
+        "bench_angle": "フラット または 立位",
+        "gear_setting": "チューブ 🔵青(13.6kg) または 🔴赤(9.0kg)",
+        "setup_detail": "懸垂スタンド背面支柱にチューブを固定し前方を向く",
+        "tips": "腕を閉じきったところで1秒キープ。胸の真ん中を限界まで絞る！",
+        "sets": 3,
+        "reps": "15〜20回",
+        "interval_sec": 60
+      },
+      {
+        "id": "pullup_wide",
+        "name": "ワイド懸垂（チンニング）",
+        "target": "背中（広背筋・逆三角形）",
+        "category": "pull",
+        "bench_angle": "なし（懸垂スタンド最上部）",
+        "gear_setting": "自重",
+        "setup_detail": "順手・肩幅の1.5倍で外側バーを保持",
+        "tips": "腕ではなく背中で引く。胸をバーに近づける感覚で広背筋を収縮！",
+        "sets": 3,
+        "reps": "限界まで",
+        "interval_sec": 90
+      },
+      {
+        "id": "chinup_close",
+        "name": "逆手ナロー懸垂",
+        "target": "背中下部 & 上腕二頭筋（力こぶ）",
+        "category": "pull",
+        "bench_angle": "なし（懸垂スタンド最上部）",
+        "gear_setting": "自重",
+        "setup_detail": "手のひらを顔側に向け、肩幅程度でバーを保持",
+        "tips": "力こぶの力も使いながら一気に引き上げる。二頭筋の最高負荷！",
+        "sets": 3,
+        "reps": "限界まで",
+        "interval_sec": 90
+      },
+      {
+        "id": "db_side_raise",
+        "name": "ダンベルサイドレイズ",
+        "target": "肩（中部・肩幅）",
+        "category": "push",
+        "bench_angle": "ベンチ端に着席 または 立位",
+        "gear_setting": "ダンベル片手 3.5kg または 4.5kg",
+        "setup_detail": "3.5kg: 1.5kg各側1枚 / 4.5kg: 2.0kg各側1枚",
+        "tips": "反動禁止。真横よりわずかに斜め前へ、遠くに放り投げる軌道！",
+        "sets": 3,
+        "reps": "15〜20回",
+        "interval_sec": 60
+      },
+      {
+        "id": "incline_shoulder_press",
+        "name": "インクラインショルダープレス",
+        "target": "肩（前部・中部）",
+        "category": "push",
+        "bench_angle": "直角寄り（75°〜80°）",
+        "gear_setting": "ダンベル片手 6.0kg または 7.0kg",
+        "setup_detail": "6kg: 1.25+1.5kg / 7kg: 1.25+2.0kg",
+        "tips": "シートに背中を預け、真上へ押し上げる。三角筋前部を破壊！",
+        "sets": 3,
+        "reps": "10〜12回",
+        "interval_sec": 75
+      },
+      {
+        "id": "tube_face_pull",
+        "name": "チューブフェイスプル",
+        "target": "肩（後部リア・立体感）",
+        "category": "pull",
+        "bench_angle": "なし（立位）",
+        "gear_setting": "チューブ 🔴赤(9.0kg) または 🔵青(13.6kg)",
+        "setup_detail": "スタンド目線の高さに固定。両端ハンドルを握る",
+        "tips": "顔・鼻先に向かって引き、肘を外側後方へ張る。丸いメロン肩の要！",
+        "sets": 3,
+        "reps": "15〜20回",
+        "interval_sec": 60
+      },
+      {
+        "id": "tube_pushdown",
+        "name": "チューブプッシュダウン",
+        "target": "二の腕裏（上腕三頭筋外側頭）",
+        "category": "push",
+        "bench_angle": "なし（立位）",
+        "gear_setting": "チューブ 🟢緑(18.2kg) または ⚫黒(22.8kg)",
+        "setup_detail": "スタンド最上部にチューブ中央を掛ける",
+        "tips": "脇を締め肘の位置を完全固定。床に向かって力強く伸ばし切る！",
+        "sets": 3,
+        "reps": "12〜15回",
+        "interval_sec": 60
+      },
+      {
+        "id": "incline_db_curl",
+        "name": "インクラインダンベルカール",
+        "target": "力こぶ（上腕二頭筋長頭）",
+        "category": "pull",
+        "bench_angle": "インクライン 45°〜60°",
+        "gear_setting": "ダンベル片手 4.5kg または 6.0kg",
+        "setup_detail": "4.5kg: 2kg×各側1枚 / 6kg: 1.25+1.5kg",
+        "tips": "腕を完全にだらりと垂らした強ストレッチ状態から巻き上げる！",
+        "sets": 3,
+        "reps": "10〜12回",
+        "interval_sec": 60
+      }
+    ];
+
+    const DUMBBELL_PRESETS = [
+      { weight: '3.0kg', label: '約3.0kg', platesPerSide: ['1.25kg'], formula: 'シャフト(0.5kg) + 1.25kg×2（各側1枚）', color: 'from-sky-500 to-cyan-500' },
+      { weight: '3.5kg', label: '約3.5kg', platesPerSide: ['1.5kg'], formula: 'シャフト(0.5kg) + 1.5kg×2（各側1枚）', color: 'from-cyan-500 to-teal-500' },
+      { weight: '4.5kg', label: '約4.5kg', platesPerSide: ['2.0kg'], formula: 'シャフト(0.5kg) + 2.0kg×2（各側1枚）', color: 'from-emerald-500 to-green-500' },
+      { weight: '6.0kg', label: '約6.0kg', platesPerSide: ['1.25kg', '1.5kg'], formula: 'シャフト(0.5kg) + (1.25kg + 1.5kg)×各2', color: 'from-amber-500 to-orange-500' },
+      { weight: '7.0kg', label: '約7.0kg', platesPerSide: ['1.25kg', '2.0kg'], formula: 'シャフト(0.5kg) + (1.25kg + 2.0kg)×各2', color: 'from-orange-500 to-red-500' },
+      { weight: '7.5kg', label: '約7.5kg', platesPerSide: ['1.5kg', '2.0kg'], formula: 'シャフト(0.5kg) + (1.5kg + 2.0kg)×各2', color: 'from-rose-500 to-pink-600' },
+      { weight: '10.0kg', label: '約10.0kg (MAX)', platesPerSide: ['1.25kg', '1.5kg', '2.0kg'], formula: 'シャフト(0.5kg) + (1.25 + 1.5 + 2.0kg)×各2 フル装着', color: 'from-rose-600 via-red-600 to-purple-600' }
+    ];
+
+    const TUBE_PRESETS = [
+      { id: 'yellow', emoji: '🟡', name: '黄', lbs: '10 LBS', kg: '4.6 kg', usage: '肩リア・ウォーミングアップ', badgeClass: 'bg-yellow-500/20 text-yellow-300 border-yellow-400/50', dotClass: 'bg-yellow-400' },
+      { id: 'red', emoji: '🔴', name: '赤', lbs: '20 LBS', kg: '9.0 kg', usage: 'フェイスプル・サイドレイズ補助', badgeClass: 'bg-red-500/20 text-red-300 border-red-400/50', dotClass: 'bg-red-500' },
+      { id: 'blue', emoji: '🔵', name: '青', lbs: '30 LBS', kg: '13.6 kg', usage: 'チェストフライ・アームカール', badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-400/50', dotClass: 'bg-blue-500' },
+      { id: 'green', emoji: '🟢', name: '緑', lbs: '40 LBS', kg: '18.2 kg', usage: 'プッシュダウン・ローイング', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-400/50', dotClass: 'bg-emerald-500' },
+      { id: 'black', emoji: '⚫', name: '黒', lbs: '50 LBS', kg: '22.8 kg', usage: '高強度コンパウンド・2本連結可', badgeClass: 'bg-zinc-700/60 text-zinc-100 border-zinc-400/60', dotClass: 'bg-zinc-900 ring-2 ring-zinc-300' }
+    ];
+
+    const NIA_LINES = {
+      boot: '来たわね。…べ、別に待ってないし。サッサと今日のメニュー回して追い込むわよ！',
+      gachaReady: '器具のセットはできた？サボらずやりなさいよ！',
+      gachaReroll: '引き直しばっかりしてないで、覚悟決めて始めなさいよね！',
+      activeSet: 'プレートと角度、ちゃんと合わせた？肘開かない！胸張る！あと3回！',
+      intervalStart: 'ちょっと、肩落ちてる！深呼吸！水飲んだら次構えなさい！',
+      interval10Sec: 'ちょっと、肩落ちてる！深呼吸！残り10秒…水飲んだら次構えなさい！',
+      interval5Sec: '残り5秒！グリップ握って、フォームに入る準備しなさい！',
+      complete: '全セット終了！…ま、今日のフォームは合格点あげてもいいかもね。明日もやりなさいよ？'
+    };
+
+    // ==================== Web Audio & Web Speech API 制御 ====================
+    class SoundAndSpeech {
+      constructor() {
+        this.audioCtx = null;
+      }
+      initAudio() {
+        if (!this.audioCtx && typeof window !== 'undefined') {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (AC) this.audioCtx = new AC();
+        }
+        if (this.audioCtx && this.audioCtx.state === 'suspended') {
+          this.audioCtx.resume();
+        }
+      }
+      vibrate(pattern = [200, 100, 200]) {
+        if (navigator.vibrate) {
+          try { navigator.vibrate(pattern); } catch {}
+        }
+      }
+      playTone(freq = 880, duration = 0.12, type = 'sine', gainVal = 0.18, delay = 0) {
+        try {
+          this.initAudio();
+          if (!this.audioCtx) return;
+          const now = this.audioCtx.currentTime + delay;
+          const osc = this.audioCtx.createOscillator();
+          const gain = this.audioCtx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, now);
+          gain.gain.setValueAtTime(gainVal, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+          osc.connect(gain);
+          gain.connect(this.audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + duration);
+        } catch {}
+      }
+      playGachaTick(step = 0) {
+        const freqs = [523.25, 587.33, 659.25, 783.99, 880, 1046.5];
+        this.playTone(freqs[step % freqs.length], 0.06, 'triangle', 0.12);
+      }
+      playGachaReveal() {
+        this.playTone(523.25, 0.1, 'triangle', 0.18, 0);
+        this.playTone(659.25, 0.1, 'triangle', 0.18, 0.08);
+        this.playTone(783.99, 0.12, 'triangle', 0.2, 0.16);
+        this.playTone(1046.5, 0.28, 'sine', 0.24, 0.25);
+        this.vibrate([80, 50, 120]);
+      }
+      playSetDone() {
+        this.playTone(659.25, 0.09, 'sine', 0.2, 0);
+        this.playTone(880, 0.18, 'sine', 0.22, 0.09);
+        this.vibrate([100]);
+      }
+      playCountdownAlert(sec) {
+        if (sec === 10) {
+          this.playTone(784, 0.12, 'square', 0.15, 0);
+          this.playTone(784, 0.12, 'square', 0.15, 0.16);
+          this.vibrate([200, 100, 200]);
+        } else if (sec === 5) {
+          this.playTone(880, 0.14, 'sawtooth', 0.16, 0);
+          this.vibrate([200, 100, 200]);
+        } else if (sec <= 3 && sec > 0) {
+          this.playTone(880, 0.1, 'sine', 0.15, 0);
+        } else if (sec === 0) {
+          this.playTone(1046.5, 0.15, 'triangle', 0.25, 0);
+          this.playTone(1318.5, 0.35, 'triangle', 0.28, 0.14);
+          this.vibrate([200, 100, 200]);
+        }
+      }
+      playWorkoutComplete() {
+        [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5].forEach((n, i) => {
+          this.playTone(n, i === 5 ? 0.45 : 0.11, 'triangle', 0.22, i * 0.11);
+        });
+        this.vibrate([200, 100, 200, 100, 350]);
+      }
+      speak(text, enabled = true) {
+        if (!enabled || !('speechSynthesis' in window)) return;
+        try {
+          window.speechSynthesis.cancel();
+          const utter = new SpeechSynthesisUtterance(text.replace(/[🟡🔴🔵🟢⚫📐🏋️🔥⚡]/gu, ''));
+          utter.lang = 'ja-JP';
+          utter.pitch = 1.25;
+          utter.rate = 1.12;
+          window.speechSynthesis.speak(utter);
+        } catch {}
+      }
+    }
+    const soundManager = new SoundAndSpeech();
+
+    // ==================== ニア・アバターコンポーネント（立ち絵SVG/画像 + 2頭身SDちびキャラ） ====================
+    function NiaAvatar({ mode, dialogue, voiceEnabled, onToggleVoice, onReplayVoice, intervalRemaining }) {
+      const [imgErr, setImgErr] = useState(false);
+
+      return (
+        <div className="relative w-full rounded-2xl bg-gradient-to-br from-[#191824] via-[#13131C] to-[#1D1118] border border-rose-500/30 shadow-xl overflow-hidden p-3.5">
+          <div className="relative flex items-center gap-3.5">
+            <div className="relative shrink-0">
+              {mode === 'chibi' ? (
+                /* インターバル中：メガホン・ポンポン・ストップウォッチ装備の2頭身SDちびキャラ */
+                <div className="relative w-28 h-32 flex items-center justify-center rounded-xl bg-gradient-to-b from-rose-950/60 to-zinc-900/90 border border-rose-500/40 overflow-hidden">
+                  <div className="animate-cheer">
+                    <svg viewBox="0 0 180 200" className="w-28 h-32">
+                      <path d="M48 45 C36 85, 38 140, 46 168 L134 168 C142 140, 144 85, 132 45 Z" fill="#16141A" />
+                      <g transform="translate(22, 104)">
+                        <circle cx="0" cy="0" r="15" fill="#E11D48" />
+                        <circle cx="-6" cy="-6" r="8" fill="#FB7185" />
+                        <circle cx="7" cy="-5" r="7" fill="#F43F5E" />
+                      </g>
+                      <path d="M66 104 L114 104 L120 144 L60 144 Z" fill="#222028" stroke="#3F3B4B" strokeWidth="2" />
+                      <polygon points="82,104 98,104 90,115" fill="#B57B5B" />
+                      <rect x="74" y="118" width="32" height="6" rx="2" fill="#E11D48" />
+                      <path d="M62 142 L118 142 L115 158 L93 158 L90 151 L87 158 L65 158 Z" fill="#F8FAFC" />
+                      <rect x="69" y="158" width="12" height="22" rx="5" fill="#B57B5B" />
+                      <rect x="99" y="158" width="12" height="22" rx="5" fill="#B57B5B" />
+                      <rect x="65" y="177" width="18" height="10" rx="4" fill="#1E1B24" />
+                      <rect x="97" y="177" width="18" height="10" rx="4" fill="#1E1B24" />
+                      <circle cx="90" cy="130" r="9" fill="#1E293B" stroke="#FBBF24" strokeWidth="2.5" />
+                      <g transform="translate(132, 76) rotate(-18)">
+                        <polygon points="0,16 32,2 32,30" fill="#E11D48" stroke="#F8FAFC" strokeWidth="2" />
+                      </g>
+                      <rect x="50" y="26" width="80" height="74" rx="34" fill="#B57B5B" />
+                      <path d="M46 56 C44 22, 72 14, 90 14 C108 14, 136 22, 134 56 C126 40, 118 52, 110 60 C104 42, 96 55, 90 62 C84 52, 76 42, 70 60 C62 50, 54 42, 46 56 Z" fill="#18161D" />
+                      <path d="M62 56 L80 62" stroke="#18161D" strokeWidth="3.2" strokeLinecap="round" />
+                      <path d="M118 56 L100 62" stroke="#18161D" strokeWidth="3.2" strokeLinecap="round" />
+                      <ellipse cx="71" cy="70" rx="9" ry="10" fill="#FFFFFF" />
+                      <ellipse cx="71" cy="71" rx="6.5" ry="8" fill="#BE123C" />
+                      <circle cx="68" cy="67" r="2.3" fill="#FFFFFF" />
+                      <ellipse cx="109" cy="70" rx="9" ry="10" fill="#FFFFFF" />
+                      <ellipse cx="109" cy="71" rx="6.5" ry="8" fill="#BE123C" />
+                      <circle cx="106" cy="67" r="2.3" fill="#FFFFFF" />
+                      <path d="M84 83 L96 83 L90 92 Z" fill="#E11D48" />
+                    </svg>
+                  </div>
+                  <span className="absolute bottom-1 inset-x-1 text-center text-[10px] font-bold bg-rose-600/90 text-white rounded px-1 py-0.5">
+                    📣 SD応援中
+                  </span>
+                </div>
+              ) : (
+                /* 通常立ち絵（ローカル画像がある場合は表示、単体HTML移動時はSVG立ち絵へ自動フォールバック） */
+                <div className="relative w-24 h-36 rounded-xl bg-zinc-900 border border-zinc-700 overflow-hidden shadow-lg flex items-center justify-center">
+                  {!imgErr ? (
+                    <img
+                      src="./public/assets/nia_stand_angle.jpg"
+                      alt="ニア立ち絵"
+                      onError={() => setImgErr(true)}
+                      className="w-full h-full object-cover object-top"
+                    />
+                  ) : (
+                    /* 単一HTMLファイル配布時用：褐色肌・黒髪ロング・赤眼・黒T・白ショートパンツ・スニーカーの立ち絵SVG */
+                    <svg viewBox="0 0 140 240" className="w-24 h-36">
+                      <path d="M40 28 C30 70, 32 135, 38 158 L102 158 C108 135, 110 70, 100 28 Z" fill="#141218" />
+                      <rect x="52" y="138" width="13" height="78" rx="6" fill="#B57B5B" />
+                      <rect x="75" y="138" width="13" height="78" rx="6" fill="#B57B5B" />
+                      <rect x="49" y="212" width="18" height="12" rx="4" fill="#18181B" />
+                      <rect x="49" y="220" width="18" height="4" rx="2" fill="#E879F9" />
+                      <rect x="73" y="212" width="18" height="12" rx="4" fill="#18181B" />
+                      <rect x="73" y="220" width="18" height="4" rx="2" fill="#E879F9" />
+                      <path d="M46 76 L94 76 L90 128 L50 128 Z" fill="#1F1E24" />
+                      <polygon points="62,76 78,76 70,90" fill="#B57B5B" />
+                      <rect x="55" y="94" width="30" height="6" rx="2" fill="#E11D48" />
+                      <path d="M48 126 L92 126 L90 144 L72 144 L70 137 L68 144 L50 144 Z" fill="#F8FAFC" />
+                      <rect x="46" y="18" width="48" height="50" rx="22" fill="#B57B5B" />
+                      <path d="M43 40 C42 15, 58 10, 70 10 C82 10, 98 15, 97 40 C90 28, 82 36, 70 42 C58 36, 50 28, 43 40 Z" fill="#18161D" />
+                      <ellipse cx="59" cy="46" rx="5.5" ry="6" fill="#FFFFFF" />
+                      <circle cx="59" cy="47" r="4" fill="#BE123C" />
+                      <ellipse cx="81" cy="46" rx="5.5" ry="6" fill="#FFFFFF" />
+                      <circle cx="81" cy="47" r="4" fill="#BE123C" />
+                      <line x1="66" y1="58" x2="74" y2="58" stroke="#7F1D1D" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-black/75 px-1.5 py-0.5 text-center text-[10px] font-black text-rose-400">
+                    NIA
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-600/20 text-rose-400 border border-rose-500/30">
+                    🔥 専属トレーナー ニア
+                  </span>
+                  {mode === 'chibi' && intervalRemaining !== null && (
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-400/40 animate-pulse">
+                      ⏱️ 残り{intervalRemaining}秒
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={onReplayVoice}
+                    className="px-2 py-1 rounded-lg bg-zinc-800 text-zinc-200 text-[11px] font-bold border border-zinc-700"
+                  >
+                    🔊 再生
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onToggleVoice}
+                    className={`px-2 py-1 rounded-lg border text-[11px] font-bold ${
+                      voiceEnabled
+                        ? 'bg-rose-600/20 border-rose-500/50 text-rose-300'
+                        : 'bg-zinc-800 border-zinc-700 text-zinc-500'
+                    }`}
+                  >
+                    {voiceEnabled ? '音声ON' : '音声OFF'}
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-xl bg-zinc-950/90 border border-zinc-800 p-3">
+                <p className="text-xs sm:text-sm font-bold leading-relaxed text-zinc-100">
+                  「{dialogue}」
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== 器具セッティングUIカード ====================
+    function GearVisualizer({ exercise }) {
+      if (!exercise) return null;
+      const { bench_angle, gear_setting, setup_detail } = exercise;
+      const matchedTubes = TUBE_PRESETS.filter(t => gear_setting.includes(t.name) || gear_setting.includes(t.emoji));
+      const matchedDumbbells = DUMBBELL_PRESETS.filter(d => gear_setting.includes(d.weight));
+
+      return (
+        <div className="rounded-2xl bg-[#151520] border border-zinc-800 p-3.5 space-y-3 shadow-lg">
+          <div className="text-[11px] font-black uppercase tracking-wider text-rose-400">
+            ⚡ 器具セッティング・クイックガイド
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-2.5">
+              <div className="text-[11px] text-zinc-400 font-bold">📐 ベンチ角度・位置</div>
+              <div className="text-xs font-black text-amber-300 mt-0.5">{bench_angle}</div>
+            </div>
+            <div className="rounded-xl bg-zinc-900 border border-zinc-800 p-2.5">
+              <div className="text-[11px] text-zinc-400 font-bold">🏋️ 使用ギア・重量</div>
+              <div className="text-xs font-black text-white mt-0.5">{gear_setting}</div>
+            </div>
+          </div>
+
+          {matchedTubes.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {matchedTubes.map(t => (
+                <span key={t.id} className={`px-2.5 py-1 rounded-full text-xs font-extrabold border ${t.badgeClass}`}>
+                  {t.emoji} {t.name} ({t.kg} / {t.lbs})
+                </span>
+              ))}
+            </div>
+          )}
+
+          {matchedDumbbells.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {matchedDumbbells.map(d => (
+                <div key={d.weight} className="flex items-center gap-2 bg-zinc-900 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs">
+                  <span className={`px-2 py-0.5 rounded font-black text-white bg-gradient-to-r ${d.color}`}>
+                    片手 {d.weight}
+                  </span>
+                  <span className="text-zinc-300 font-bold">各側: {d.platesPerSide.join(' + ')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="rounded-xl bg-rose-950/25 border border-rose-500/30 px-3 py-2 text-xs font-bold text-zinc-200">
+            🔧 SETUP: {setup_detail}
+          </div>
+        </div>
+      );
+    }
+
+    // ==================== メインアプリコンポーネント ====================
+    function App() {
+      const STORAGE_KEY = 'gachafit_nia_state_v1';
+      const getDateKey = (d = new Date()) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      const [savedState, setSavedState] = useState(() => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) return JSON.parse(raw);
+        } catch {}
+        return { history: {}, voiceEnabled: true, menuCount: 4, customExercises: null };
+      });
+
+      useEffect(() => {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify(savedState)); } catch {}
+      }, [savedState]);
+
+      const exercisesMaster = savedState.customExercises || DEFAULT_EXERCISES;
+      const [activeTab, setActiveTab] = useState('home');
+      const [gachaMode, setGachaMode] = useState('all');
+      const [isSpinning, setIsSpinning] = useState(false);
+      const [todaysMenu, setTodaysMenu] = useState([]);
+      const [niaDialogue, setNiaDialogue] = useState(NIA_LINES.boot);
+
+      const [currentExIndex, setCurrentExIndex] = useState(0);
+      const [currentSet, setCurrentSet] = useState(1);
+      const [isInterval, setIsInterval] = useState(false);
+      const [intervalSecLeft, setIntervalSecLeft] = useState(0);
+      const [intervalTotalSec, setIntervalTotalSec] = useState(90);
+      const [workoutFinished, setWorkoutFinished] = useState(false);
+
+      const say = (line) => {
+        setNiaDialogue(line);
+        soundManager.speak(line, savedState.voiceEnabled);
+      };
+
+      const rollGacha = (reroll = false) => {
+        if (isSpinning) return;
+        soundManager.initAudio();
+        const pool = gachaMode === 'all' ? exercisesMaster : exercisesMaster.filter(e => e.category === gachaMode);
+        const count = Math.min(savedState.menuCount || 4, pool.length);
+        setIsSpinning(true);
+        setWorkoutFinished(false);
+
+        let tick = 0;
+        const iv = setInterval(() => {
+          tick += 1;
+          soundManager.playGachaTick(tick);
+          if (tick >= 7) {
+            clearInterval(iv);
+            const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+            setTodaysMenu(picked);
+            setIsSpinning(false);
+            setCurrentExIndex(0);
+            setCurrentSet(1);
+            setIsInterval(false);
+            soundManager.playGachaReveal();
+            say(reroll ? NIA_LINES.gachaReroll : NIA_LINES.gachaReady);
+          }
+        }, 85);
+      };
+
+      useEffect(() => {
+        if (!isInterval) return;
+        const iv = setInterval(() => {
+          setIntervalSecLeft(prev => {
+            const next = prev - 1;
+            if (next === 10) {
+              soundManager.playCountdownAlert(10);
+              say(NIA_LINES.interval10Sec);
+            } else if (next === 5) {
+              soundManager.playCountdownAlert(5);
+              setNiaDialogue(NIA_LINES.interval5Sec);
+            } else if (next <= 0) {
+              clearInterval(iv);
+              soundManager.playCountdownAlert(0);
+              advanceAfterInterval();
+              return 0;
+            }
+            return next;
+          });
+        }, 1000);
+        return () => clearInterval(iv);
+      }, [isInterval, currentExIndex, currentSet, todaysMenu]);
+
+      const advanceAfterInterval = () => {
+        setIsInterval(false);
+        const ex = todaysMenu[currentExIndex];
+        if (!ex) return;
+        if (currentSet < ex.sets) {
+          setCurrentSet(s => s + 1);
+          say(NIA_LINES.activeSet);
+        } else if (currentExIndex < todaysMenu.length - 1) {
+          const nextEx = todaysMenu[currentExIndex + 1];
+          setCurrentExIndex(i => i + 1);
+          setCurrentSet(1);
+          say(`次は「${nextEx.name}」よ！${NIA_LINES.activeSet}`);
+        }
+      };
+
+      const handleCompleteSet = () => {
+        const ex = todaysMenu[currentExIndex];
+        if (!ex) return;
+        if (currentSet >= ex.sets && currentExIndex >= todaysMenu.length - 1) {
+          setIsInterval(false);
+          setWorkoutFinished(true);
+          soundManager.playWorkoutComplete();
+          const todayKey = getDateKey();
+          setSavedState(prev => ({
+            ...prev,
+            history: {
+              ...(prev.history || {}),
+              [todayKey]: { completedAt: new Date().toISOString(), exercises: todaysMenu }
+            }
+          }));
+          say(NIA_LINES.complete);
+          return;
+        }
+        soundManager.playSetDone();
+        setIntervalTotalSec(ex.interval_sec || 90);
+        setIntervalSecLeft(ex.interval_sec || 90);
+        setIsInterval(true);
+        say(NIA_LINES.intervalStart);
+      };
+
+      const currentExercise = todaysMenu[currentExIndex];
+      const totalDays = Object.keys(savedState.history || {}).length;
+
+      return (
+        <div className="min-h-screen bg-[#0B0B10] text-zinc-100 pb-24 max-w-md mx-auto">
+          <header className="sticky top-0 z-30 backdrop-blur-xl bg-[#0B0B10]/90 border-b border-zinc-800 px-4 py-3 flex items-center justify-between">
+            <div>
+              <h1 className="text-base font-black text-white">GachaFit <span className="text-xs text-rose-400">with ニア</span></h1>
+              <p className="text-[10px] text-zinc-400">1タップ自宅トレ（胸・肩・腕・背中）</p>
+            </div>
+            <div className="px-3 py-1 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-black text-orange-400">
+              🔥 累計 {totalDays} 日達成
+            </div>
+          </header>
+
+          <main className="px-4 pt-3 space-y-4">
+            <NiaAvatar
+              mode={activeTab === 'workout' && isInterval ? 'chibi' : 'standing'}
+              dialogue={niaDialogue}
+              voiceEnabled={savedState.voiceEnabled}
+              onToggleVoice={() => setSavedState(p => ({ ...p, voiceEnabled: !p.voiceEnabled }))}
+              onReplayVoice={() => soundManager.speak(niaDialogue, true)}
+              intervalRemaining={isInterval ? intervalSecLeft : null}
+            />
+
+            {activeTab === 'home' && (
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-[#151520] border border-zinc-800 p-3.5 space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: 'push', title: 'Push', sub: '胸・肩前・三頭' },
+                      { id: 'pull', title: 'Pull', sub: '背中・二頭・肩後' },
+                      { id: 'all', title: 'オールスター', sub: '全11種目から抽選' }
+                    ].map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setGachaMode(m.id)}
+                        className={`p-2.5 rounded-xl border text-left ${
+                          gachaMode === m.id ? 'bg-rose-600/25 border-rose-500 text-white' : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        <div className="text-xs font-black">{m.title}</div>
+                        <div className="text-[10px] text-zinc-400">{m.sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => rollGacha(false)}
+                      className="flex-1 py-3.5 rounded-xl bg-gradient-to-r from-rose-600 to-purple-600 text-white font-black text-sm shadow-lg"
+                    >
+                      🎰 今日のメニューを生成（1タップ）
+                    </button>
+                    {todaysMenu.length > 0 && (
+                      <button
+                        onClick={() => rollGacha(true)}
+                        className="px-3.5 py-3.5 rounded-xl bg-zinc-900 border border-zinc-700 text-xs font-bold"
+                      >
+                        🔄 リロール
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {todaysMenu.map((ex, idx) => (
+                  <div key={ex.id} className="rounded-2xl bg-[#151520] border border-zinc-800 p-3.5 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-rose-400">#{idx + 1} {ex.target}</span>
+                      <span className="text-xs font-bold text-zinc-300">{ex.sets}セット × {ex.reps}</span>
+                    </div>
+                    <div className="text-sm font-black text-white">{ex.name}</div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 font-bold">📐 {ex.bench_angle}</span>
+                      <span className="px-2 py-0.5 rounded bg-zinc-900 text-zinc-200 font-bold">🏋️ {ex.gear_setting}</span>
+                    </div>
+                  </div>
+                ))}
+
+                {todaysMenu.length > 0 && (
+                  <button
+                    onClick={() => { setActiveTab('workout'); say(NIA_LINES.activeSet); }}
+                    className="w-full py-4 rounded-2xl bg-emerald-500 text-zinc-950 font-black text-base"
+                  >
+                    ▶️ このメニューでワークアウト開始！
+                  </button>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'workout' && currentExercise && !workoutFinished && (
+              <div className="space-y-4">
+                <div className="rounded-2xl bg-[#151520] border border-zinc-800 p-4 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-bold text-rose-400">{currentExercise.target}</span>
+                    <span className="text-sm font-black text-white">セット {currentSet} / {currentExercise.sets}</span>
+                  </div>
+                  <h2 className="text-lg font-black text-white">{currentExercise.name}</h2>
+                  <p className="text-xs text-amber-200 font-bold">💡 {currentExercise.tips}</p>
+                </div>
+
+                <GearVisualizer exercise={currentExercise} />
+
+                {isInterval ? (
+                  <div className="rounded-2xl bg-rose-950/50 border-2 border-rose-500 p-5 text-center space-y-3">
+                    <div className="text-xs font-bold text-rose-300">インターバル残り時間</div>
+                    <div className="text-5xl font-black text-white">{intervalSecLeft}秒</div>
+                    <button
+                      onClick={advanceAfterInterval}
+                      className="w-full py-3 rounded-xl bg-rose-600 text-white font-black text-xs"
+                    >
+                      休憩をスキップして次セットへ
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={handleCompleteSet}
+                    className="w-full py-5 rounded-2xl bg-gradient-to-r from-rose-600 to-purple-600 text-white font-black text-lg shadow-xl"
+                  >
+                    ✅ セット完了！（{currentSet}/{currentExercise.sets}）
+                  </button>
+                )}
+              </div>
+            )}
+          </main>
+
+          <nav className="fixed bottom-0 inset-x-0 max-w-md mx-auto bg-[#0B0B10]/95 border-t border-zinc-800 p-2 grid grid-cols-2 gap-2">
+            <button onClick={() => setActiveTab('home')} className={`py-2 rounded-xl text-xs font-black ${activeTab === 'home' ? 'bg-rose-600/20 text-rose-400' : 'text-zinc-400'}`}>
+              🎰 ガチャ編成
+            </button>
+            <button onClick={() => setActiveTab('workout')} className={`py-2 rounded-xl text-xs font-black ${activeTab === 'workout' ? 'bg-rose-600/20 text-rose-400' : 'text-zinc-400'}`}>
+              🏋️ ワークアウト実行
+            </button>
+          </nav>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
