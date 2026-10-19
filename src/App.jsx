@@ -28,6 +28,7 @@ import { INITIAL_PAST_HISTORY } from './data/pastHistory';
 import {
   DUMBBELL_PRESETS,
   TUBE_PRESETS,
+  COMBINED_TUBE_PRESETS,
   HARDWARE_GALLERY,
   NIA_LINES
 } from './data/hardware';
@@ -36,7 +37,8 @@ import { cloudSync } from './utils/cloudSync';
 import NiaAvatar from './components/NiaAvatar';
 import GearVisualizer from './components/GearVisualizer';
 
-const STORAGE_KEY = 'gachafit_nia_state_v2';
+const STORAGE_KEY = 'gachafit_nia_state_v3';
+const LEGACY_KEYS = ['gachafit_nia_state_v2', 'gachafit_nia_state_v1'];
 
 // 今日の日付キー (YYYY-MM-DD)
 function getDateKey(date = new Date()) {
@@ -69,21 +71,33 @@ function calculateStreak(historyMap) {
 }
 
 export default function App() {
-  // LocalStorageからの初期状態復元（PDFの過去実績22日分を自動マージ）
+  // LocalStorageからの初期状態復元（旧バージョンからの履歴・設定シームレス引き継ぎ）
   const [savedState, setSavedState] = useState(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw);
+      let raw = localStorage.getItem(STORAGE_KEY);
+      let legacyData = {};
+      if (!raw) {
+        // 旧キーから履歴と設定を探索して引き継ぐ
+        for (const lk of LEGACY_KEYS) {
+          const lRaw = localStorage.getItem(lk);
+          if (lRaw) {
+            legacyData = JSON.parse(lRaw);
+            break;
+          }
+        }
+      }
+      const source = raw ? JSON.parse(raw) : legacyData;
+      if (source && Object.keys(source).length > 0) {
         return {
-          syncProvider: 'gist', // 'gist' | 'cf_kv'
-          githubToken: '',
-          gistId: '57407a144f486faa900e00818e389a0b',
-          cfSyncKey: '',
-          lastSyncedAt: null,
-          ...parsed,
-          gistId: parsed.gistId || '57407a144f486faa900e00818e389a0b',
-          history: { ...INITIAL_PAST_HISTORY, ...(parsed.history || {}) }
+          syncProvider: source.syncProvider || 'gist',
+          githubToken: source.githubToken || '',
+          gistId: source.gistId || '57407a144f486faa900e00818e389a0b',
+          cfSyncKey: source.cfSyncKey || '',
+          lastSyncedAt: source.lastSyncedAt || null,
+          voiceEnabled: source.voiceEnabled !== undefined ? source.voiceEnabled : true,
+          menuCount: source.menuCount || 4,
+          customExercises: null, // 最新の10kg固定＆チューブ2本＆懸垂アシスト版を即時適用
+          history: { ...INITIAL_PAST_HISTORY, ...(source.history || {}) }
         };
       }
     } catch {
@@ -1354,6 +1368,38 @@ export default function App() {
                     </span>
                     <span className="text-[11px] font-bold text-zinc-300">
                       {t.usage}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* チューブ2本重ねハイパワー組み合わせ */}
+            <div className="rounded-2xl bg-[#151520] border border-amber-500/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-black text-amber-300 flex items-center gap-1.5">
+                  ⚡ チューブ2本重ね（束ね持ち・2本連結）ハイパワー設定
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                  最大41kg
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400">
+                2本を束ねてハンドルを通すか、カラビナ連結でジムのマシンと同等〜それ以上の高負荷を実現！
+              </p>
+              <div className="space-y-1.5">
+                {COMBINED_TUBE_PRESETS.map((c, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center justify-between rounded-xl bg-zinc-900/90 border border-zinc-800 px-3 py-2 text-xs"
+                  >
+                    <span className="inline-flex items-center gap-1.5 font-black text-white">
+                      <span>{c.emoji}</span>
+                      <span>{c.name}</span>
+                      <span className="text-amber-400 text-[11px]">({c.kg} / {c.lbs})</span>
+                    </span>
+                    <span className="text-[11px] font-bold text-zinc-300">
+                      {c.usage}
                     </span>
                   </div>
                 ))}

@@ -103,25 +103,38 @@ export default function GearVisualizer({ exercise }) {
 
       {/* チューブ種目の場合：色付きバッジを明示 */}
       {matchedTubes.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2 pt-0.5">
-          <span className="text-[11px] font-bold text-zinc-400">推奨チューブ:</span>
-          {matchedTubes.map((t) => (
-            <span
-              key={t.id}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold border ${t.badgeClass}`}
-            >
-              <span className={`w-2.5 h-2.5 rounded-full ${t.dotClass}`} />
-              {t.emoji} {t.name} ({t.kg} / {t.lbs})
-            </span>
-          ))}
+        <div className="space-y-1.5 pt-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-bold text-zinc-400">推奨チューブ:</span>
+            {matchedTubes.map((t) => (
+              <span
+                key={t.id}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-extrabold border ${t.badgeClass}`}
+              >
+                <span className={`w-2.5 h-2.5 rounded-full ${t.dotClass}`} />
+                {t.emoji} {t.name} ({t.kg} / {t.lbs})
+              </span>
+            ))}
+          </div>
+          {gear_setting.includes('2本') && (
+            <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1">
+              <span>⚡ 2本重ね（束ね持ち・2本連結）でジムのマシン並みの高重量負荷を実現！</span>
+            </div>
+          )}
+          {gear_setting.includes('アシスト') && (
+            <div className="text-[11px] font-bold text-emerald-300 flex items-center gap-1">
+              <span>💡 上部バーにチューブを掛けて足を乗せれば、体重が23〜41kg軽くなり0回でも確実に上がる！</span>
+            </div>
+          )}
         </div>
       )}
 
       {/* 4WDダンベル種目の場合：片手プレート構成バッジを明示 */}
       {matchedDumbbells.length > 0 && (
         <div className="rounded-xl bg-zinc-950/90 border border-zinc-800/90 p-2.5 space-y-1.5">
-          <div className="text-[11px] font-bold text-zinc-400">
-            🔩 4WDダンベル 片手プレート装着内訳（シャフト0.5kg）
+          <div className="flex items-center justify-between text-[11px] font-bold text-zinc-400">
+            <span>🔩 4WDダンベル 片手プレート装着内訳（シャフト0.5kg）</span>
+            <span className="text-amber-400 font-black">付替え不要の10kg固定！</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {matchedDumbbells.map((d) => (
@@ -142,6 +155,7 @@ export default function GearVisualizer({ exercise }) {
                       {p}
                     </span>
                   ))}
+                  <span className="text-[10px] text-zinc-400 ml-1">（フル装着）</span>
                 </div>
               </div>
             ))}
