@@ -771,12 +771,12 @@ export default function App() {
                       onClick={() => startWorkout(idx)}
                       className="group cursor-pointer rounded-2xl bg-[#151520] hover:bg-[#1B1B29] border border-zinc-800 hover:border-rose-500/50 p-3.5 transition shadow-md"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="w-7 h-7 rounded-lg bg-rose-600/20 border border-rose-500/40 text-rose-400 font-black text-xs flex items-center justify-center shrink-0">
+                      <div className="flex items-start justify-between gap-2.5">
+                        <div className="flex items-start gap-2.5 flex-1 min-w-0">
+                          <span className="w-7 h-7 rounded-lg bg-rose-600/20 border border-rose-500/40 text-rose-400 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
                             {idx + 1}
                           </span>
-                          <div>
+                          <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span
                                 className={`text-[10px] font-black uppercase px-1.5 py-0.5 rounded ${
@@ -791,14 +791,14 @@ export default function App() {
                                 {ex.target}
                               </span>
                             </div>
-                            <h3 className="text-sm font-black text-white mt-0.5 group-hover:text-rose-300 transition">
+                            <h3 className="text-sm font-black text-white mt-1 group-hover:text-rose-300 transition leading-snug break-words">
                               {ex.name}
                             </h3>
                           </div>
                         </div>
 
-                        <div className="text-right shrink-0">
-                          <span className="inline-block px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-[11px] font-extrabold text-zinc-200">
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="inline-block px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-[11px] font-extrabold text-zinc-200 whitespace-nowrap">
                             {ex.sets}セット × {ex.reps}
                           </span>
                           {doneSets > 0 && (
@@ -962,16 +962,16 @@ export default function App() {
 
                   {/* 現在実行中の種目ヘッダーカード */}
                   <div className="rounded-2xl bg-[#151520] border border-zinc-800 p-4 space-y-3 shadow-lg">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 text-[11px] font-extrabold">
                           🎯 {currentExercise.target}
                         </span>
-                        <h2 className="text-lg font-black text-white mt-1">
+                        <h2 className="text-lg font-black text-white mt-1 leading-snug break-words">
                           {currentExercise.name}
                         </h2>
                       </div>
-                      <div className="text-right shrink-0 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5">
+                      <div className="text-right shrink-0 bg-zinc-900 border border-zinc-700 rounded-xl px-3 py-1.5 ml-2">
                         <div className="text-[10px] text-zinc-400 font-bold">
                           現在セット
                         </div>
