@@ -217,3 +217,57 @@ export const NIA_LINES = {
     'お、お疲れ様…。最後までやり切るなんて、少しは見直してあげたわよ。プロテイン飲みなさいよね！'
   ]
 };
+
+// 部位集中特化コース（資料ベース厳選プリセット）
+export const SPECIALIZED_COURSES = [
+  {
+    id: 'shoulder_focus',
+    title: '肩集中フォーカス',
+    subtitle: '三角筋前・中・後を全方位攻略',
+    badge: '3種目',
+    color: 'from-amber-600/20 to-orange-600/20 border-amber-500/50 text-amber-300',
+    exerciseIds: [
+      'incline_shoulder_press',
+      'db_side_raise',
+      'incline_rear_delt_or_high_facepull'
+    ]
+  },
+  {
+    id: 'chest_focus',
+    title: '胸集中フォーカス',
+    subtitle: '上部・外側ストレッチ・自重追い込み',
+    badge: '4種目',
+    color: 'from-rose-600/20 to-pink-600/20 border-rose-500/50 text-rose-300',
+    exerciseIds: [
+      'incline_db_press',
+      'low_anchor_chest_fly',
+      'db_bench_press',
+      'pushups_finisher'
+    ]
+  },
+  {
+    id: 'arms_focus',
+    title: '腕集中パンプ',
+    subtitle: '二頭（力こぶ）＆三頭（二の腕裏）',
+    badge: '4種目',
+    color: 'from-violet-600/20 to-purple-600/20 border-violet-500/50 text-violet-300',
+    exerciseIds: [
+      'incline_db_curl',
+      'tube_pushdown',
+      'db_hammer_curl',
+      'db_overhead_triceps'
+    ]
+  },
+  {
+    id: 'back_focus',
+    title: '背中・引く力強化',
+    subtitle: '逆三角形の広背筋＆厚み',
+    badge: '3種目',
+    color: 'from-sky-600/20 to-cyan-600/20 border-sky-500/50 text-sky-300',
+    exerciseIds: [
+      'pullup_wide',
+      'inverted_row_or_chest_supported',
+      'chinup_close'
+    ]
+  }
+];

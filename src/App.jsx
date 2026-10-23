@@ -14,6 +14,8 @@ import {
   Zap,
   SkipForward,
   Plus,
+  Minus,
+  Target,
   Wrench,
   FileJson,
   Cloud,
@@ -30,7 +32,8 @@ import {
   TUBE_PRESETS,
   COMBINED_TUBE_PRESETS,
   HARDWARE_GALLERY,
-  NIA_LINES
+  NIA_LINES,
+  SPECIALIZED_COURSES
 } from './data/hardware';
 import { soundManager } from './utils/soundAndSpeech';
 import { cloudSync } from './utils/cloudSync';
@@ -147,9 +150,13 @@ export default function App() {
   const [niaEmotion, setNiaEmotion] = useState('blush');
 
   // ワークアウト進行管理
+  const [activeCourseId, setActiveCourseId] = useState(null);
   const [currentExIndex, setCurrentExIndex] = useState(0);
   const [currentSet, setCurrentSet] = useState(1);
   const [completedSetsLog, setCompletedSetsLog] = useState({});
+  const [actualRecordsLog, setActualRecordsLog] = useState({}); // { [exId]: [{ set, reps, weight }] }
+  const [inputReps, setInputReps] = useState(10);
+  const [inputWeight, setInputWeight] = useState('10.0kg');
   const [isInterval, setIsInterval] = useState(false);
   const [intervalSecLeft, setIntervalSecLeft] = useState(0);
   const [intervalTotalSec, setIntervalTotalSec] = useState(90);
@@ -363,10 +370,12 @@ export default function App() {
         clearInterval(spinInterval);
         const finalPicked = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
         setTodaysMenu(finalPicked);
+        setActiveCourseId(null);
         setIsSpinning(false);
         setCurrentExIndex(0);
         setCurrentSet(1);
         setCompletedSetsLog({});
+        setActualRecordsLog({});
         setIsInterval(false);
         soundManager.playGachaReveal();
 
@@ -377,6 +386,63 @@ export default function App() {
       }
     }, 85);
   };
+
+  // 部位集中特化コース選択（資料ベース厳選プリセット）
+  const handleSelectCourse = (course) => {
+    if (isSpinning) return;
+    soundManager.initAudio();
+    const matched = course.exerciseIds
+      .map((id) => exercisesMaster.find((ex) => ex.id === id))
+      .filter(Boolean);
+
+    if (matched.length === 0) return;
+
+    setTodaysMenu(matched);
+    setActiveCourseId(course.id);
+    setCurrentExIndex(0);
+    setCurrentSet(1);
+    setCompletedSetsLog({});
+    setActualRecordsLog({});
+    setIsInterval(false);
+    setWorkoutFinished(false);
+    soundManager.playGachaReveal();
+
+    triggerNiaLine(
+      `【${course.title}】をセットしたわよ！${course.subtitle}、妥協せず全セットやり切りなさい！`,
+      'serious',
+      true
+    );
+  };
+
+  const currentExercise = todaysMenu[currentExIndex];
+
+  // 種目またはセット切り替え時に、目標回数やギア設定から実績入力の初期値を自動設定
+  useEffect(() => {
+    if (!currentExercise) return;
+    const existing = actualRecordsLog[currentExercise.id]?.find((r) => r.set === currentSet);
+    if (existing) {
+      setInputReps(existing.reps);
+      setInputWeight(existing.weight);
+    } else {
+      const prevRecord = actualRecordsLog[currentExercise.id]?.[currentSet - 2];
+      if (prevRecord) {
+        setInputReps(prevRecord.reps);
+        setInputWeight(prevRecord.weight);
+      } else {
+        const repMatch = currentExercise.reps?.match(/\d+/);
+        setInputReps(repMatch ? parseInt(repMatch[0], 10) : 10);
+        let defaultW = '10.0kg';
+        if (currentExercise.gear_setting?.includes('10.0kg') || currentExercise.gear_setting?.includes('10kg')) {
+          defaultW = '10.0kg';
+        } else if (currentExercise.gear_setting?.includes('自重')) {
+          defaultW = '自重';
+        } else if (currentExercise.gear_setting?.includes('チューブ')) {
+          defaultW = 'チューブ';
+        }
+        setInputWeight(defaultW);
+      }
+    }
+  }, [currentExercise, currentSet]);
 
   // ワークアウト開始
   const startWorkout = (startIndex = 0) => {
@@ -449,10 +515,27 @@ export default function App() {
     }
   };
 
-  // 「セット完了」1タップ処理
+  // 「セット完了」1タップ処理（実績レップ数・重量を記録）
   const handleCompleteSet = () => {
     const currentExercise = todaysMenu[currentExIndex];
     if (!currentExercise) return;
+
+    const newRecord = {
+      set: currentSet,
+      reps: inputReps,
+      weight: inputWeight || '10.0kg'
+    };
+
+    const exRecords = [
+      ...(actualRecordsLog[currentExercise.id] || []).filter((r) => r.set !== currentSet),
+      newRecord
+    ].sort((a, b) => a.set - b.set);
+
+    const updatedRecordsLog = {
+      ...actualRecordsLog,
+      [currentExercise.id]: exRecords
+    };
+    setActualRecordsLog(updatedRecordsLog);
 
     const updatedLog = {
       ...completedSetsLog,
@@ -464,7 +547,7 @@ export default function App() {
     const isLastEx = currentExIndex >= todaysMenu.length - 1;
 
     if (isLastSetOfEx && isLastEx) {
-      completeEntireWorkout(updatedLog);
+      completeEntireWorkout(updatedLog, updatedRecordsLog);
       return;
     }
 
@@ -473,11 +556,15 @@ export default function App() {
     setIntervalTotalSec(sec);
     setIntervalSecLeft(sec);
     setIsInterval(true);
-    triggerNiaLine(NIA_LINES.intervalStart[0], 'normal', true);
+    triggerNiaLine(
+      `第${currentSet}セット完了！実績「${inputReps}回 (${inputWeight})」記録したわ！呼吸を整えなさい！`,
+      'smile',
+      true
+    );
   };
 
   // 全ワークアウト完了＆LocalStorage保存＆自動クラウド同期処理
-  const completeEntireWorkout = (finalLog) => {
+  const completeEntireWorkout = (finalLog, finalRecordsLog = actualRecordsLog) => {
     setIsInterval(false);
     setWorkoutFinished(true);
     soundManager.playWorkoutComplete();
@@ -489,13 +576,14 @@ export default function App() {
       ...(savedState.history || {}),
       [todayKey]: {
         completedAt: new Date().toISOString(),
-        mode: gachaMode,
+        mode: activeCourseId || gachaMode,
         exercises: todaysMenu.map((ex) => ({
           id: ex.id,
           name: ex.name,
           target: ex.target,
           gear_setting: ex.gear_setting,
-          sets: finalLog[ex.id] || ex.sets
+          sets: finalLog[ex.id] || ex.sets,
+          records: finalRecordsLog[ex.id] || []
         })),
         totalSets
       }
@@ -534,8 +622,6 @@ export default function App() {
     }
     return cells;
   }, [calendarMonth]);
-
-  const currentExercise = todaysMenu[currentExIndex] || null;
 
   return (
     <div className="min-h-screen bg-[#0B0B10] text-zinc-100 pb-24 max-w-md mx-auto relative shadow-2xl border-x border-zinc-900/80">
@@ -725,6 +811,55 @@ export default function App() {
               </div>
             </div>
 
+            {/* 資料厳選：部位集中フォーカスコース */}
+            <div className="rounded-2xl bg-[#151520] border border-zinc-800/90 p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-zinc-300 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-amber-400" />
+                  または部位集中コースを1タップ選択
+                </span>
+                <span className="text-[10px] font-bold text-zinc-500">
+                  ※種目数特化
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {SPECIALIZED_COURSES.map((course) => {
+                  const isSelected = activeCourseId === course.id;
+                  return (
+                    <button
+                      key={course.id}
+                      type="button"
+                      disabled={isSpinning}
+                      onClick={() => handleSelectCourse(course)}
+                      className={`p-2.5 rounded-xl border text-left transition active:scale-95 flex flex-col justify-between ${
+                        isSelected
+                          ? `bg-gradient-to-br ${course.color} shadow-lg ring-1 ring-amber-400/50`
+                          : 'bg-zinc-900/80 border-zinc-800 hover:border-zinc-700 text-zinc-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-zinc-800/90 text-amber-300 border border-zinc-700">
+                          {course.badge}
+                        </span>
+                        {isSelected && (
+                          <span className="text-[10px] font-extrabold text-amber-400 flex items-center gap-0.5">
+                            ✓ 選択中
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs font-black text-white">
+                        {course.title}
+                      </div>
+                      <div className="text-[10px] text-zinc-400 leading-tight mt-0.5 truncate">
+                        {course.subtitle}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {isSpinning && (
               <div className="space-y-2.5">
                 {spinningPreview.map((ex, i) => (
@@ -884,21 +1019,38 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="rounded-xl bg-zinc-950/80 border border-zinc-800 p-3 text-left space-y-1.5">
+                <div className="rounded-xl bg-zinc-950/80 border border-zinc-800 p-3 text-left space-y-2">
                   <div className="text-[11px] font-bold text-zinc-400">
-                    達成メニュー内訳
+                    達成メニュー内訳（実績）
                   </div>
-                  {todaysMenu.map((ex) => (
-                    <div
-                      key={ex.id}
-                      className="flex items-center justify-between text-xs py-1 border-b border-zinc-900 last:border-none"
-                    >
-                      <span className="font-bold text-zinc-200">{ex.name}</span>
-                      <span className="text-emerald-400 font-extrabold">
-                        {ex.sets}セット完了 ✓
-                      </span>
-                    </div>
-                  ))}
+                  {todaysMenu.map((ex) => {
+                    const exRecords = actualRecordsLog[ex.id] || [];
+                    return (
+                      <div
+                        key={ex.id}
+                        className="py-1.5 border-b border-zinc-900 last:border-none space-y-1 text-xs"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-zinc-200">{ex.name}</span>
+                          <span className="text-emerald-400 font-extrabold">
+                            {ex.sets}セット完遂 ✓
+                          </span>
+                        </div>
+                        {exRecords.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {exRecords.map((r, rIdx) => (
+                              <span
+                                key={rIdx}
+                                className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] text-amber-300 font-semibold"
+                              >
+                                {r.set}S: <strong className="text-white">{r.reps}回</strong> ({r.weight})
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
@@ -1007,6 +1159,98 @@ export default function App() {
                   {/* 現場特化：器具セッティングUIカード */}
                   <GearVisualizer exercise={currentExercise} />
 
+                  {/* 今回セットの実績入力カード（レップ数・重量） */}
+                  {!isInterval && (
+                    <div className="rounded-2xl bg-[#151520] border border-rose-500/40 p-4 space-y-3 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-white flex items-center gap-1.5">
+                          <Target className="w-4 h-4 text-rose-400" />
+                          第{currentSet}セットの実績入力
+                        </span>
+                        <span className="text-[11px] font-bold text-zinc-400">
+                          目標: <strong className="text-emerald-400">{currentExercise.reps}</strong>
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* 実績回数（レップ数）コントローラー */}
+                        <div className="rounded-xl bg-zinc-950/80 border border-zinc-800 p-2.5 space-y-1.5">
+                          <div className="text-[10px] font-bold text-zinc-400">実績回数 (Reps)</div>
+                          <div className="flex items-center justify-between gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setInputReps((r) => Math.max(1, r - 1))}
+                              className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-black flex items-center justify-center active:scale-95 transition"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <div className="flex-1 text-center">
+                              <input
+                                type="number"
+                                value={inputReps}
+                                onChange={(e) => setInputReps(Math.max(0, parseInt(e.target.value) || 0))}
+                                className="w-14 text-center font-black text-2xl text-emerald-400 bg-transparent focus:outline-none"
+                              />
+                              <span className="text-xs text-zinc-400 ml-0.5">回</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setInputReps((r) => r + 1)}
+                              className="w-8 h-8 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white font-black flex items-center justify-center active:scale-95 transition"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* 実績重量・負荷コントローラー */}
+                        <div className="rounded-xl bg-zinc-950/80 border border-zinc-800 p-2.5 space-y-1.5">
+                          <div className="text-[10px] font-bold text-zinc-400">使用重量・負荷</div>
+                          <div className="flex items-center justify-between">
+                            <input
+                              type="text"
+                              value={inputWeight}
+                              onChange={(e) => setInputWeight(e.target.value)}
+                              className="w-full text-center font-black text-sm text-amber-300 bg-transparent border-b border-zinc-700 pb-0.5 focus:border-amber-400 focus:outline-none"
+                              placeholder="例: 10.0kg"
+                            />
+                          </div>
+                          <div className="flex items-center justify-center gap-1 flex-wrap pt-0.5">
+                            {['10.0kg', '自重', 'チューブ'].map((preset) => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => setInputWeight(preset)}
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border transition ${
+                                  inputWeight === preset
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                    : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-zinc-200'
+                                }`}
+                              >
+                                {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 完了済みセットの実績バッジ一覧 */}
+                      {actualRecordsLog[currentExercise.id]?.length > 0 && (
+                        <div className="pt-2 border-t border-zinc-800/80 flex items-center gap-2 flex-wrap text-xs">
+                          <span className="text-[10px] font-bold text-zinc-400">完了履歴:</span>
+                          {actualRecordsLog[currentExercise.id].map((rec, rIdx) => (
+                            <span
+                              key={rIdx}
+                              className="px-2 py-0.5 rounded-md bg-zinc-900 border border-emerald-500/40 text-[11px] font-bold text-emerald-300"
+                            >
+                              第{rec.set}S: <strong>{rec.reps}回</strong> ({rec.weight}) ✓
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* インターバル中：自動カウントダウンタイマーUI / 動作中：1タップセット完了ボタン */}
                   {isInterval ? (
                     <div className="rounded-2xl bg-gradient-to-b from-rose-950/60 to-[#151520] border-2 border-rose-500 p-4 space-y-3 shadow-2xl">
@@ -1067,10 +1311,15 @@ export default function App() {
                     <button
                       type="button"
                       onClick={handleCompleteSet}
-                      className="w-full py-5 rounded-2xl bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white font-black text-lg shadow-xl shadow-rose-600/30 active:scale-[0.98] transition flex items-center justify-center gap-2.5"
+                      className="w-full py-5 rounded-2xl bg-gradient-to-r from-rose-600 via-pink-600 to-purple-600 hover:from-rose-500 hover:to-purple-500 text-white font-black text-lg shadow-xl shadow-rose-600/30 active:scale-[0.98] transition flex flex-col items-center justify-center gap-1"
                     >
-                      <CheckCircle2 className="w-6 h-6" />
-                      セット完了！（{currentSet}/{currentExercise.sets}セット目）
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="w-6 h-6" />
+                        第{currentSet}セット完了！（{currentSet}/{currentExercise.sets}）
+                      </div>
+                      <div className="text-xs text-rose-100 font-extrabold opacity-90">
+                        実績記録：{inputReps}回 ({inputWeight}) で記録する
+                      </div>
                     </button>
                   )}
                 </>
@@ -1270,21 +1519,35 @@ export default function App() {
               </div>
 
               {savedState.history?.[selectedDateKey] ? (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   {savedState.history[selectedDateKey].exercises?.map((ex, i) => (
                     <div
                       key={i}
-                      className="flex items-center justify-between text-xs bg-zinc-900/90 border border-zinc-800 rounded-xl px-3 py-2"
+                      className="text-xs bg-zinc-900/90 border border-zinc-800 rounded-xl p-3 space-y-2"
                     >
-                      <div>
-                        <div className="font-black text-white">{ex.name}</div>
-                        <div className="text-[11px] text-zinc-400">
-                          {ex.gear_setting}
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-black text-white">{ex.name}</div>
+                          <div className="text-[11px] text-zinc-400">
+                            {ex.gear_setting}
+                          </div>
                         </div>
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[11px] shrink-0">
+                          {ex.sets}セット完了
+                        </span>
                       </div>
-                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold text-[11px] shrink-0">
-                        {ex.sets}セット完了
-                      </span>
+                      {Array.isArray(ex.records) && ex.records.length > 0 && (
+                        <div className="pt-2 border-t border-zinc-800/80 flex flex-wrap gap-1.5">
+                          {ex.records.map((r, rIdx) => (
+                            <span
+                              key={rIdx}
+                              className="px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-700/80 text-[10px] font-bold text-amber-300"
+                            >
+                              第{r.set || rIdx + 1}S: <strong className="text-white">{r.reps}回</strong> ({r.weight})
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
