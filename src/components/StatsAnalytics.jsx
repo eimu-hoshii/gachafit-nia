@@ -22,28 +22,36 @@ const BODY_PARTS = [
   { id: 'core', name: '脚・体幹', color: '#10B981', bgClass: 'bg-emerald-500', textClass: 'text-emerald-400', borderClass: 'border-emerald-500/40' }
 ];
 
-// 種目名やターゲットから部位を自動判定
-function detectBodyPart(ex) {
-  const name = (ex.name || '').toLowerCase();
+// 種目名やターゲットから部位を自動判定（targetプロパティ最優先で厳密リンク）
+export function detectBodyPart(ex) {
+  if (!ex) return 'chest';
   const target = (ex.target || '').toLowerCase();
+  const name = (ex.name || '').toLowerCase();
 
-  if (target.includes('胸') || name.includes('プレス') || name.includes('フライ') || name.includes('プッシュアップ') || name.includes('チェスト') || name.includes('ベンチプレス')) {
-    if (!name.includes('ショルダー') && !name.includes('レッグ') && !name.includes('インクラインショルダー')) {
-      return 'chest';
-    }
-  }
-  if (target.includes('背中') || name.includes('懸垂') || name.includes('チンニング') || name.includes('ロー') || name.includes('ラット') || name.includes('プルダウン')) {
+  // 1. targetプロパティが明記されている場合（種目マスターは100%正確にマッピング）
+  if (target.includes('背中')) return 'back';
+  if (target.includes('肩')) return 'shoulder';
+  if (target.includes('腕') || target.includes('力こぶ') || target.includes('三頭') || target.includes('二頭')) return 'arm';
+  if (target.includes('胸')) return 'chest';
+  if (target.includes('腹') || target.includes('体幹') || target.includes('脚')) return 'core';
+
+  // 2. targetが無い過去履歴（旧データ）用の名前フォールバック判定
+  if (name.includes('ラット') || name.includes('プルダウン') || name.includes('ローイング') || name.includes('ロウ') || name.includes('懸垂') || name.includes('チンニング')) {
     return 'back';
   }
-  if (target.includes('肩') || name.includes('レイズ') || name.includes('ショルダー') || name.includes('フェイスプル') || name.includes('リア')) {
+  if (name.includes('ショルダー') || name.includes('サイドレイズ') || name.includes('リアレイズ') || name.includes('フロントレイズ') || name.includes('フェイスプル')) {
     return 'shoulder';
   }
-  if (target.includes('腕') || target.includes('力こぶ') || target.includes('三頭') || target.includes('二頭') || name.includes('カール') || name.includes('プッシュダウン') || name.includes('ディップス') || name.includes('フレンチプレス') || name.includes('biseps') || name.includes('traiseps')) {
+  if (name.includes('カール') || name.includes('プッシュダウン') || name.includes('ディップス') || name.includes('フレンチプレス') || name.includes('biseps') || name.includes('traiseps') || name.includes('トライセプス')) {
     return 'arm';
   }
-  if (target.includes('腹') || target.includes('体幹') || target.includes('脚') || name.includes('レッグ') || name.includes('スクワット') || name.includes('腹筋')) {
+  if (name.includes('ベンチプレス') || name.includes('チェストプレス') || name.includes('ペックフライ') || name.includes('プッシュアップ') || name.includes('フライ')) {
+    return 'chest';
+  }
+  if (name.includes('レッグ') || name.includes('スクワット') || name.includes('腹筋') || name.includes('腹')) {
     return 'core';
   }
+
   return 'chest';
 }
 
@@ -101,94 +109,101 @@ function extractWorkoutMetrics(ex) {
   return { maxWeight: w, totalVolume, best1RM };
 }
 
+// 全履歴エントリーを時系列順に平坦化するヘルパー
+export function flattenHistory(history = {}) {
+  const list = [];
+  const sortedDates = Object.keys(history).sort();
+
+  sortedDates.forEach((dateKey) => {
+    const dayData = history[dateKey];
+    if (!dayData || !Array.isArray(dayData.exercises)) return;
+
+    const dateObj = new Date(dayData.completedAt || `${dateKey}T12:00:00`);
+    dayData.exercises.forEach((ex) => {
+      const bodyPart = detectBodyPart(ex);
+      const metrics = extractWorkoutMetrics(ex);
+      list.push({
+        dateKey,
+        dateObj,
+        name: ex.name,
+        bodyPart,
+        sets: ex.sets || 3,
+        ...metrics
+      });
+    });
+  });
+  return list;
+}
+
+// 部位別 回復ステータスマップの算出関数（外部エクスポート対応）
+export function getRecoveryStatusList(history = {}) {
+  const flat = flattenHistory(history);
+  const now = new Date();
+
+  return BODY_PARTS.map((part) => {
+    const matching = flat
+      .filter((h) => h.bodyPart === part.id)
+      .sort((a, b) => b.dateObj - a.dateObj);
+
+    let hoursSince = Infinity;
+    let lastDateStr = '記録なし';
+
+    if (matching.length > 0) {
+      const latest = matching[0];
+      hoursSince = (now.getTime() - latest.dateObj.getTime()) / (1000 * 60 * 60);
+      lastDateStr = latest.dateKey;
+    }
+
+    let status = '全回復・準備完了';
+    let statusColor = 'text-emerald-400';
+    let barColor = 'bg-emerald-500';
+    let percent = 100;
+    let badge = '超回復◎';
+
+    if (hoursSince < 24) {
+      status = '回復中（ダメージ大）';
+      statusColor = 'text-rose-400';
+      barColor = 'bg-rose-500';
+      percent = Math.min(100, Math.max(15, Math.round((hoursSince / 72) * 100)));
+      badge = '休養推奨🔴';
+    } else if (hoursSince < 48) {
+      status = '筋肉痛注意（回復中）';
+      statusColor = 'text-orange-400';
+      barColor = 'bg-orange-500';
+      percent = Math.min(100, Math.round((hoursSince / 72) * 100));
+      badge = '回復進行🟠';
+    } else if (hoursSince < 72) {
+      status = 'ほぼ回復（軽め可）';
+      statusColor = 'text-amber-300';
+      barColor = 'bg-amber-400';
+      percent = Math.min(100, Math.round((hoursSince / 72) * 100));
+      badge = '準レディ🟡';
+    } else {
+      percent = 100;
+    }
+
+    return {
+      ...part,
+      hoursSince,
+      lastDateStr,
+      status,
+      statusColor,
+      barColor,
+      percent,
+      badge
+    };
+  });
+}
+
 export default function StatsAnalytics({ history = {}, exercisesMaster = [] }) {
   const [selectedExerciseName, setSelectedExerciseName] = useState('');
   const [selectedMetric, setSelectedMetric] = useState('1rm'); // '1rm' | 'volume' | 'weight'
 
   // 全履歴エントリーを時系列順（古い順）に平坦化
-  const flatHistory = useMemo(() => {
-    const list = [];
-    const sortedDates = Object.keys(history).sort();
-
-    sortedDates.forEach((dateKey) => {
-      const dayData = history[dateKey];
-      if (!dayData || !Array.isArray(dayData.exercises)) return;
-
-      const dateObj = new Date(dayData.completedAt || `${dateKey}T12:00:00`);
-      dayData.exercises.forEach((ex) => {
-        const bodyPart = detectBodyPart(ex);
-        const metrics = extractWorkoutMetrics(ex);
-        list.push({
-          dateKey,
-          dateObj,
-          name: ex.name,
-          bodyPart,
-          sets: ex.sets || 3,
-          ...metrics
-        });
-      });
-    });
-    return list;
-  }, [history]);
+  const flatHistory = useMemo(() => flattenHistory(history), [history]);
 
   // ① 回復ステータスマップの算出
-  const recoveryStatusList = useMemo(() => {
-    const now = new Date();
-    return BODY_PARTS.map((part) => {
-      // その部位の最新トレーニング日時を探索
-      const matching = flatHistory
-        .filter((h) => h.bodyPart === part.id)
-        .sort((a, b) => b.dateObj - a.dateObj);
-
-      let hoursSince = Infinity;
-      let lastDateStr = '記録なし';
-
-      if (matching.length > 0) {
-        const latest = matching[0];
-        hoursSince = (now.getTime() - latest.dateObj.getTime()) / (1000 * 60 * 60);
-        lastDateStr = latest.dateKey;
-      }
-
-      let status = '全回復・準備完了';
-      let statusColor = 'text-emerald-400';
-      let barColor = 'bg-emerald-500';
-      let percent = 100;
-      let badge = '超回復◎';
-
-      if (hoursSince < 24) {
-        status = '回復中（ダメージ大）';
-        statusColor = 'text-rose-400';
-        barColor = 'bg-rose-500';
-        percent = Math.min(100, Math.max(15, Math.round((hoursSince / 72) * 100)));
-        badge = '休養推奨🔴';
-      } else if (hoursSince < 48) {
-        status = '筋肉痛注意（回復中）';
-        statusColor = 'text-orange-400';
-        barColor = 'bg-orange-500';
-        percent = Math.min(100, Math.round((hoursSince / 72) * 100));
-        badge = '回復進行🟠';
-      } else if (hoursSince < 72) {
-        status = 'ほぼ回復（軽め可）';
-        statusColor = 'text-amber-300';
-        barColor = 'bg-amber-400';
-        percent = Math.min(100, Math.round((hoursSince / 72) * 100));
-        badge = '準レディ🟡';
-      } else {
-        percent = 100;
-      }
-
-      return {
-        ...part,
-        hoursSince,
-        lastDateStr,
-        status,
-        statusColor,
-        barColor,
-        percent,
-        badge
-      };
-    });
-  }, [flatHistory]);
+  const recoveryStatusList = useMemo(() => getRecoveryStatusList(history), [history]);
 
   // ニアによる回復状況レコメンド
   const niaRecoveryAdvice = useMemo(() => {

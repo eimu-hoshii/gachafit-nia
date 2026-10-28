@@ -44,7 +44,7 @@ import { soundManager } from './utils/soundAndSpeech';
 import { cloudSync } from './utils/cloudSync';
 import NiaAvatar from './components/NiaAvatar';
 import GearVisualizer from './components/GearVisualizer';
-import StatsAnalytics from './components/StatsAnalytics';
+import StatsAnalytics, { getRecoveryStatusList, detectBodyPart } from './components/StatsAnalytics';
 import { EditExerciseModal, AddExercisePickerModal } from './components/MenuCustomizerModals';
 
 const STORAGE_KEY = 'gachafit_nia_state_v3';
@@ -206,6 +206,19 @@ export default function App() {
     (savedState.syncProvider === 'gist' && savedState.githubToken) ||
       (savedState.syncProvider === 'cf_kv' && savedState.cfSyncKey)
   );
+
+  // 部位別回復ステータスのリアルタイム算出（メニュー連動）
+  const recoveryStatusList = useMemo(
+    () => getRecoveryStatusList(savedState.history || {}),
+    [savedState.history]
+  );
+  const recoveryMap = useMemo(() => {
+    const map = {};
+    recoveryStatusList.forEach((r) => {
+      map[r.id] = r;
+    });
+    return map;
+  }, [recoveryStatusList]);
 
   // セリフ変更＆音声読み上げヘルパー
   const triggerNiaLine = (line, emotion = 'serious', speakNow = true) => {
@@ -765,6 +778,31 @@ export default function App() {
         {activeTab === 'home' && (
           <div className="space-y-4">
             <div className="rounded-2xl bg-[#151520] border border-zinc-800/90 p-3.5 space-y-3">
+              {/* 超回復ステータス ミニインジケーター（メニュー選定即時判断用） */}
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800/60 flex-wrap gap-1">
+                <span className="text-[11px] font-black text-zinc-300 flex items-center gap-1">
+                  <Flame className="w-3.5 h-3.5 text-rose-500" />
+                  超回復レディネス:
+                </span>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {recoveryStatusList.map((p) => (
+                    <span
+                      key={p.id}
+                      title={`${p.name}: ${p.status} (${p.hoursSince === Infinity ? '未実施' : Math.round(p.hoursSince) + 'h前'})`}
+                      className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
+                        p.percent >= 100
+                          ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                          : p.hoursSince < 24
+                          ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      {p.name}{p.percent >= 100 ? '🟢' : p.hoursSince < 24 ? '🔴' : '🟡'}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex items-center justify-between">
                 <span className="text-xs font-extrabold text-zinc-300 flex items-center gap-1.5">
                   <Sliders className="w-3.5 h-3.5 text-rose-500" />
@@ -974,6 +1012,9 @@ export default function App() {
 
                 {todaysMenu.map((ex, idx) => {
                   const doneSets = completedSetsLog[ex.id] || 0;
+                  const bodyPartId = detectBodyPart(ex);
+                  const recStatus = recoveryMap[bodyPartId];
+
                   return (
                     <div
                       key={ex.id}
@@ -999,6 +1040,19 @@ export default function App() {
                               <span className="text-[11px] font-bold text-zinc-400">
                                 {ex.target}
                               </span>
+                              {recStatus && (
+                                <span
+                                  className={`text-[9px] font-black px-1.5 py-0.5 rounded border ${
+                                    recStatus.percent >= 100
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                      : recStatus.hoursSince < 24
+                                      ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                      : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                  }`}
+                                >
+                                  {recStatus.name}: {recStatus.badge}
+                                </span>
+                              )}
                             </div>
                             <h3 className="text-sm font-black text-white mt-1 group-hover:text-rose-300 transition leading-snug break-words">
                               {ex.name}
