@@ -23,7 +23,12 @@ import {
   DownloadCloud,
   Download,
   Upload,
-  X
+  X,
+  TrendingUp,
+  Edit3,
+  Trash2,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
 import defaultExercises from './data/exercises.json';
 import { INITIAL_PAST_HISTORY } from './data/pastHistory';
@@ -39,6 +44,8 @@ import { soundManager } from './utils/soundAndSpeech';
 import { cloudSync } from './utils/cloudSync';
 import NiaAvatar from './components/NiaAvatar';
 import GearVisualizer from './components/GearVisualizer';
+import StatsAnalytics from './components/StatsAnalytics';
+import { EditExerciseModal, AddExercisePickerModal } from './components/MenuCustomizerModals';
 
 const STORAGE_KEY = 'gachafit_nia_state_v3';
 const LEGACY_KEYS = ['gachafit_nia_state_v2', 'gachafit_nia_state_v1'];
@@ -161,6 +168,10 @@ export default function App() {
   const [intervalSecLeft, setIntervalSecLeft] = useState(0);
   const [intervalTotalSec, setIntervalTotalSec] = useState(90);
   const [workoutFinished, setWorkoutFinished] = useState(false);
+
+  // 手動メニューカスタマイズ管理
+  const [editingExercise, setEditingExercise] = useState(null);
+  const [showAddPickerModal, setShowAddPickerModal] = useState(false);
 
   // カレンダー表示月と選択日
   const [calendarMonth, setCalendarMonth] = useState(() => {
@@ -443,6 +454,56 @@ export default function App() {
       }
     }
   }, [currentExercise, currentSet]);
+
+  // 手動メニュー編成：種目の削除
+  const handleDeleteExercise = (idx) => {
+    setTodaysMenu((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  // 手動メニュー編成：種目の並び替え
+  const handleMoveExercise = (idx, direction) => {
+    setTodaysMenu((prev) => {
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= prev.length) return prev;
+      const copy = [...prev];
+      const temp = copy[idx];
+      copy[idx] = copy[targetIdx];
+      copy[targetIdx] = temp;
+      return copy;
+    });
+  };
+
+  // 手動メニュー編成：種目設定の更新保存
+  const handleSaveEditedExercise = (updatedEx) => {
+    setTodaysMenu((prev) =>
+      prev.map((ex) => (ex.id === updatedEx.id ? updatedEx : ex))
+    );
+    triggerNiaLine(
+      `「${updatedEx.name}」の設定を変更したわよ！${updatedEx.sets}セット×${updatedEx.reps}、気合入れてやりなさい！`,
+      'serious',
+      true
+    );
+  };
+
+  // 手動メニュー編成：ピッカーで選んだ種目の追加
+  const handleAddPickedExercises = (pickedList) => {
+    setTodaysMenu((prev) => {
+      const existingIds = prev.map((p) => p.id);
+      const newItems = pickedList.filter((item) => !existingIds.includes(item.id));
+      return [...prev, ...newItems];
+    });
+    triggerNiaLine(
+      `手動で${pickedList.length}種目をメニューに追加したわ！自分好みにカスタムしたなら最後までサボっちゃダメよ！`,
+      'smile',
+      true
+    );
+  };
+
+  // 手動メニュー編成：ゼロから作成ピッカーを開く
+  const handleOpenManualBuilder = () => {
+    soundManager.initAudio();
+    setShowAddPickerModal(true);
+  };
 
   // ワークアウト開始
   const startWorkout = (startIndex = 0) => {
@@ -860,6 +921,19 @@ export default function App() {
               </div>
             </div>
 
+            {/* 手動メニュー編成エントリーボタン */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                disabled={isSpinning}
+                onClick={handleOpenManualBuilder}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-zinc-900 to-zinc-800 hover:from-zinc-800 hover:to-zinc-700 border border-zinc-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow active:scale-98"
+              >
+                <Sliders className="w-4 h-4 text-rose-400" />
+                🛠️ 自分でメニューをゼロから手動編成する
+              </button>
+            </div>
+
             {isSpinning && (
               <div className="space-y-2.5">
                 {spinningPreview.map((ex, i) => (
@@ -944,13 +1018,59 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="mt-2.5 pt-2.5 border-t border-zinc-800/80 flex flex-wrap items-center gap-2 text-xs">
-                        <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold">
-                          📐 {ex.bench_angle}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 font-bold">
-                          🏋️ {ex.gear_setting}
-                        </span>
+                      {/* 器具情報 ＆ 種目カスタマイズアクション */}
+                      <div className="mt-2.5 pt-2 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-xs flex-wrap">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold">
+                            📐 {ex.bench_angle}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700 text-zinc-200 font-bold">
+                            🏋️ {ex.gear_setting}
+                          </span>
+                        </div>
+
+                        {/* 種目ごとの手動カスタマイズボタン群 */}
+                        <div
+                          className="flex items-center gap-1 shrink-0 ml-auto"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <button
+                            type="button"
+                            title="設定・Rep・重量を編集"
+                            onClick={() => setEditingExercise(ex)}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-rose-400" />
+                          </button>
+                          {idx > 0 && (
+                            <button
+                              type="button"
+                              title="上へ移動"
+                              onClick={() => handleMoveExercise(idx, -1)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {idx < todaysMenu.length - 1 && (
+                            <button
+                              type="button"
+                              title="下へ移動"
+                              onClick={() => handleMoveExercise(idx, 1)}
+                              className="p-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            title="メニューから削除"
+                            onClick={() => handleDeleteExercise(idx)}
+                            className="p-1.5 rounded-lg bg-zinc-900 hover:bg-rose-950/60 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                       <p className="mt-1.5 text-[11px] text-zinc-400">
                         🔧 {ex.setup_detail}
@@ -958,6 +1078,16 @@ export default function App() {
                     </div>
                   );
                 })}
+
+                {/* 種目を手動で追加するボタン */}
+                <button
+                  type="button"
+                  onClick={() => setShowAddPickerModal(true)}
+                  className="w-full py-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-dashed border-zinc-700 hover:border-rose-500/50 text-zinc-300 hover:text-white font-bold text-xs flex items-center justify-center gap-2 transition"
+                >
+                  <Plus className="w-4 h-4 text-rose-400" />
+                  種目を手動で追加する（全{exercisesMaster.length}種目から選択）
+                </button>
 
                 <button
                   type="button"
@@ -971,13 +1101,21 @@ export default function App() {
             )}
 
             {!isSpinning && todaysMenu.length === 0 && (
-              <div className="rounded-2xl bg-[#151520]/70 border border-dashed border-zinc-800 p-6 text-center space-y-2">
+              <div className="rounded-2xl bg-[#151520]/70 border border-dashed border-zinc-800 p-6 text-center space-y-3">
                 <p className="text-xs font-bold text-zinc-300">
-                  上の「今日のメニューを生成」を1タップ！
+                  「ガチャ生成」または「手動編成」でメニューをセット！
                 </p>
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  保有器具（4WD 10kgダンベル・Readaeer 5色チューブ・インクラインベンチ・7in1懸垂スタンド）と過去22回のトレーニング実績に完全最適化したメニューを即座に提示します。
+                  保有器具（4WD 10kgダンベル・Readaeer 5色チューブ・インクラインベンチ・7in1懸垂スタンド）と過去のトレーニング実績に完全最適化。自由に追加・削除・編集も可能です。
                 </p>
+                <button
+                  type="button"
+                  onClick={handleOpenManualBuilder}
+                  className="px-4 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-rose-400 border border-zinc-700 text-xs font-black inline-flex items-center gap-1.5 transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  自分で好きな種目を選んで開始
+                </button>
               </div>
             )}
           </div>
@@ -1865,6 +2003,14 @@ export default function App() {
         </div>
       )}
 
+      {/* ==================== ⑤ データ分析（回復ステータス・部位バランス・成長推移） ==================== */}
+      {activeTab === 'stats' && (
+        <StatsAnalytics
+          history={savedState.history}
+          exercisesMaster={exercisesMaster}
+        />
+      )}
+
       {/* JSONマスターデータ編集モーダル */}
       {showJsonModal && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1929,13 +2075,31 @@ export default function App() {
         </div>
       )}
 
+      {/* 種目設定カスタマイズモーダル */}
+      <EditExerciseModal
+        isOpen={Boolean(editingExercise)}
+        onClose={() => setEditingExercise(null)}
+        exercise={editingExercise}
+        onSave={handleSaveEditedExercise}
+      />
+
+      {/* 種目追加ピッカーモーダル */}
+      <AddExercisePickerModal
+        isOpen={showAddPickerModal}
+        onClose={() => setShowAddPickerModal(false)}
+        exercisesMaster={exercisesMaster}
+        alreadySelectedIds={todaysMenu.map((m) => m.id)}
+        onSelectExercises={handleAddPickedExercises}
+      />
+
       {/* ボトムナビゲーションバー（親指1タップ操作） */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 max-w-md mx-auto backdrop-blur-xl bg-[#0B0B10]/95 border-t border-zinc-800/90 px-3 py-2 grid grid-cols-4 gap-1">
+      <nav className="fixed bottom-0 inset-x-0 z-30 max-w-md mx-auto backdrop-blur-xl bg-[#0B0B10]/95 border-t border-zinc-800/90 px-2 py-2 grid grid-cols-5 gap-1">
         {[
-          { id: 'home', label: 'ガチャ', icon: Sparkles },
+          { id: 'home', label: 'ホーム/編成', icon: Sparkles },
           { id: 'workout', label: '実践トレ', icon: Dumbbell },
           { id: 'calendar', label: 'スタンプ帳', icon: CalendarIcon },
-          { id: 'gear', label: '保有ギア/JSON', icon: Wrench }
+          { id: 'stats', label: 'データ分析', icon: TrendingUp },
+          { id: 'gear', label: 'ギア/JSON', icon: Wrench }
         ].map((item) => {
           const IconComponent = item.icon;
           const active = activeTab === item.id;
@@ -1951,7 +2115,7 @@ export default function App() {
               }`}
             >
               <IconComponent className="w-5 h-5 mb-0.5" />
-              <span className="text-[10px]">{item.label}</span>
+              <span className="text-[10px] truncate max-w-full">{item.label}</span>
             </button>
           );
         })}
