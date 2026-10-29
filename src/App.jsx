@@ -456,7 +456,9 @@ export default function App() {
         const repMatch = currentExercise.reps?.match(/\d+/);
         setInputReps(repMatch ? parseInt(repMatch[0], 10) : 10);
         let defaultW = '10.0kg';
-        if (currentExercise.gear_setting?.includes('10.0kg') || currentExercise.gear_setting?.includes('10kg')) {
+        if (currentExercise.gear_setting?.includes('20.0kg') || currentExercise.gear_setting?.includes('20kg')) {
+          defaultW = '20.0kg';
+        } else if (currentExercise.gear_setting?.includes('10.0kg') || currentExercise.gear_setting?.includes('10kg')) {
           defaultW = '10.0kg';
         } else if (currentExercise.gear_setting?.includes('自重')) {
           defaultW = '自重';
@@ -1408,7 +1410,7 @@ export default function App() {
                             />
                           </div>
                           <div className="flex items-center justify-center gap-1 flex-wrap pt-0.5">
-                            {['10.0kg', '自重', 'チューブ'].map((preset) => (
+                            {['20.0kg', '10.0kg', '自重', 'チューブ'].map((preset) => (
                               <button
                                 key={preset}
                                 type="button"

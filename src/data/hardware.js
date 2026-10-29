@@ -186,6 +186,12 @@ export const HARDWARE_GALLERY = [
     title: 'Wolfyok fitness 7in1 懸垂スタンド',
     sub: '上部チンニングバー(足掛けチューブアシスト対応) / 中段ディップスバー / チューブ固定支柱',
     image: './assets/gear_tower.jpg'
+  },
+  {
+    id: 'barbell',
+    title: 'バーベル（20.0kg固定）',
+    sub: 'シャフト＋プレート 20kg固定（OHP / ベントロー / アームカール / ナローベンチ / RDL）',
+    image: './assets/gear_barbell.jpg'
   }
 ];
 
@@ -268,6 +274,19 @@ export const SPECIALIZED_COURSES = [
       'pullup_wide',
       'inverted_row_or_chest_supported',
       'chinup_close'
+    ]
+  },
+  {
+    id: 'barbell_beast',
+    title: 'バーベル王道ビルド',
+    subtitle: '20kg固定バーベルで全身高強度ビルド',
+    badge: '4種目',
+    color: 'from-emerald-600/20 to-teal-600/20 border-emerald-500/50 text-emerald-300',
+    exerciseIds: [
+      'barbell_ohp',
+      'barbell_bent_row',
+      'barbell_close_grip_bench',
+      'barbell_curl'
     ]
   }
 ];

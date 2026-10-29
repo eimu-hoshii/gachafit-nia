@@ -28,7 +28,7 @@ export function EditExerciseModal({
   const [benchAngle, setBenchAngle] = useState(exercise.bench_angle || 'フラット（0°）');
 
   const repPresets = ['6〜8回', '8〜10回', '10〜12回', '12〜15回', '限界まで'];
-  const weightPresets = ['ダンベル片手 10.0kg', '自重', '自重（チューブアシスト）', 'チューブ2本重ね', '⚫黒チューブ'];
+  const weightPresets = ['バーベル 20.0kg', 'ダンベル片手 10.0kg', '自重', '自重（チューブアシスト）', 'チューブ2本重ね'];
 
   const handleSave = () => {
     onSave({
@@ -153,6 +153,7 @@ export function EditExerciseModal({
             className="w-full text-xs font-bold bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-rose-500"
           >
             <option value="フラット（0°）">フラット（0°）</option>
+            <option value="デクライン（またはヒップリフト）">デクライン（またはヒップリフト）</option>
             <option value="インクライン 30°〜45°">インクライン（30°〜45°）</option>
             <option value="インクライン 45°〜60°">インクライン（45°〜60°）</option>
             <option value="直角寄り（75°〜80°）">直角寄り（75°〜80°）</option>
